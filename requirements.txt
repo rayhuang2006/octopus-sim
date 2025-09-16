@@ -14,3 +14,6 @@ pyvista
 
 # A backend for PyVista's interactive plotting window
 pyqt5
+
+# For reading/writing images and creating animations
+imageio
