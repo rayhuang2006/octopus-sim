@@ -62,7 +62,7 @@ Follow these steps to set up the environment and run the simulations on your loc
 ### 1. Clone the Repository
 
 ```bash
-git clone [https://github.com/rayhuang2006/octopus-sim.git](https://github.com/rayhuang2006/octopus-sim.git)
+git clone https://github.com/rayhuang2006/octopus-sim.git
 cd octopus-sim
 ````
 
