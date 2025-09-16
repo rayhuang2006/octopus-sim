@@ -1,0 +1,16 @@
+# requirements.txt
+
+# Core simulation engine for soft rods
+pyelastica
+
+# Fundamental package for numerical computing
+numpy
+
+# For 2D/3D plotting (used in week1 and week2)
+matplotlib
+
+# For advanced 3D visualization and animations (used in week3)
+pyvista
+
+# A backend for PyVista's interactive plotting window
+pyqt5
