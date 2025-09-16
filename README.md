@@ -90,7 +90,7 @@ pip install -r requirements.txt
 
 -----
 
-## Important Note on Week 3 Scripts
+## ⚠️⚠️⚠️ Important Note on Week 3 Scripts ⚠️⚠️⚠️
 
 **Please be aware:** While the GIF showcase proves that `week3_locomotion.py` can work correctly, the Week 3 scripts may exhibit instability on different systems.
 
