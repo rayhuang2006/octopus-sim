@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import pyvista as pv
 import time
 
@@ -11,77 +10,13 @@ from elastica.dissipation import AnalyticalLinearDamper
 from elastica.timestepper.symplectic_steppers import PositionVerlet
 from elastica.timestepper import integrate
 
-
 # --------------------------
 # Simulator Class
 class OctopusSimulator(BaseSystemCollection, Constraints, Forcing, Damping, CallBacks):
     pass
 
-
 # --------------------------
-class PostProcessingCallback(CallBackBaseClass):
-    def __init__(self, step_skip, callback_params, rods):
-        super().__init__()
-        self.every = step_skip
-        self.rods = rods
-        self.callback_params = callback_params
-
-    def make_callback(self, system, time, current_step: int):
-        if current_step % self.every == 0:
-            total_mass = 0.0
-            com_position = np.zeros(3)
-            for rod in self.rods:
-                total_mass += np.sum(rod.mass)
-                com_position += np.sum(rod.position_collection * rod.mass, axis=1)
-
-            if total_mass > 0:
-                self.callback_params["com_history"].append(com_position / total_mass)
-
-
-# --------------------------
-
-# ================= ADD THIS NEW CLASS =================
-# 用於即時 3D 可視化的回呼類別
-class LiveVisualizer(CallBackBaseClass):
-    def __init__(self, step_skip, rods):
-        CallBackBaseClass.__init__(self)
-        self.every = step_skip
-        self.rods = rods
-        
-        # --- PyVista setup for real-time plotting ---
-        self.plotter = pv.Plotter()
-        self.plotter.add_text("Live Octopus Simulation", position="upper_edge", font_size=12)
-        
-        # 為每一隻手臂創建一個 3D "管狀" 模型 (mesh)
-        self.rod_meshes = []
-        for i, rod in enumerate(self.rods):
-            # 使用 Spline 和 tube filter 讓線條變為平滑且有半徑的管子
-            spline = pv.Spline(rod.position_collection.T)
-            mesh = spline.tube(radius=rod.radius.mean()) # 使用平均半徑
-            self.rod_meshes.append(mesh)
-            self.plotter.add_mesh(mesh, color="#0047AB", name=f"arm_{i}")
-
-        # 設定攝影機初始位置
-        self.plotter.camera_position = 'xy'
-        self.plotter.camera.elevation = 30
-        self.plotter.camera.zoom(1.2)
-        
-        # 顯示初始畫面，interactive_update=True 是即時模式的關鍵
-        self.plotter.show(interactive_update=True, auto_close=False)
-
-    def make_callback(self, system, time, current_step: int):
-        if current_step % self.every == 0:
-            # --- Real-time update logic ---
-            for i, rod in enumerate(self.rods):
-                # 更新 3D 模型的頂點位置
-                new_points = rod.position_collection.T
-                self.rod_meshes[i].points = new_points
-            
-            # 刷新 3D 視窗
-            self.plotter.render()
-# ================= END OF ADDITION =================
-# PyVista Visualization Callback
-# MODIFIED to use the callback_params pattern
+# PyVista 回呼，用來保存每幀
 class PyVistaCallback(CallBackBaseClass):
     def __init__(self, step_skip, rods, callback_params):
         super().__init__()
@@ -93,10 +28,8 @@ class PyVistaCallback(CallBackBaseClass):
         if current_step % self.every == 0:
             frame = []
             for rod in self.rods:
-                frame.append(rod.position_collection.copy().T)  # shape (n_nodes, 3)
-            # Append frames to the list inside the dictionary
+                frame.append(rod.position_collection.copy().T)
             self.callback_params["frames"].append(frame)
-
 
 # --------------------------
 # Ground + friction
@@ -112,9 +45,7 @@ class GroundPlaneWithFriction(NoForces):
         if node_indices.size == 0:
             return
 
-        system.external_forces[1, node_indices] += -self.k * system.position_collection[
-            1, node_indices
-        ]
+        system.external_forces[1, node_indices] += -self.k * system.position_collection[1, node_indices]
 
         element_indices = np.minimum(node_indices, system.n_elems - 1)
         tangent_vectors = system.tangents[..., element_indices]
@@ -127,7 +58,6 @@ class GroundPlaneWithFriction(NoForces):
         friction_force_tangential[1,:] = 0
         
         system.external_forces[..., node_indices] += friction_force_tangential
-
 
 # --------------------------
 # Gait controller
@@ -144,17 +74,10 @@ class GaitController(NoForces):
     def apply_forces(self, system, time: np.float64 = 0.0):
         for i, arm in enumerate(self.arms):
             director_matrix = arm.director_collection[..., 0]
-            
-            torque1 = self.amplitude * np.sin(
-                2 * np.pi * self.frequency * time + self.phase_shift * i
-            )
-            torque2 = self.amplitude * np.cos(
-                2 * np.pi * self.frequency * time + self.phase_shift * i
-            )
-            
+            torque1 = self.amplitude * np.sin(2 * np.pi * self.frequency * time + self.phase_shift * i)
+            torque2 = self.amplitude * np.cos(2 * np.pi * self.frequency * time + self.phase_shift * i)
             torque_vec = torque1 * director_matrix @ self.torque_axis_1 + torque2 * self.torque_axis_2
             arm.external_torques[..., 0] += torque_vec
-
 
 # --------------------------
 # Connector
@@ -170,13 +93,10 @@ class RodConnector(NoForces):
             pb = rod_b.position_collection[:, idx_b]
             delta = pb - pa
             dist = np.linalg.norm(delta)
-            
             force_magnitude = self.k_connection * dist
             force_vec = force_magnitude * delta / (dist + 1e-12)
-            
             rod_a.external_forces[:, idx_a] += force_vec
             rod_b.external_forces[:, idx_b] -= force_vec
-
 
 # --------------------------
 def build_octopus_with_body():
@@ -209,15 +129,14 @@ def build_octopus_with_body():
     )
 
     rods_list = [central_body]
-    attachment_indices = [0] * 4 + [1] * 4
-    
+    attachment_indices = [0]*4 + [1]*4
+
     for i in range(num_arms):
-        angle = i * (2 * np.pi / num_arms)
+        angle = i * (2*np.pi / num_arms)
         attach_idx = attachment_indices[i]
         start_pt = central_body.position_collection[:, attach_idx]
         start_dir = np.array([np.cos(angle), 0.0, np.sin(angle)])
         normal = np.array([0.0, 1.0, 0.0])
-        
         rod = CosseratRod.straight_rod(
             n_elements=n_elem,
             start=start_pt,
@@ -230,12 +149,49 @@ def build_octopus_with_body():
             shear_modulus=shear_modulus,
         )
         rods_list.append(rod)
-
     return rods_list
 
+# --------------------------
+def visualize_octopus_frames(frames, delay=0.05):
+    plotter = pv.Plotter(window_size=(900,700))
+    plotter.add_text("Octopus Simulation", position="upper_edge", font_size=12)
+
+    actors = []
+    for arm_pts in frames[0]:
+        n = arm_pts.shape[0]
+        if n >= 2:
+            lines = np.empty((n-1,3),dtype=np.int_)
+            lines[:,0] = 2
+            lines[:,1] = np.arange(0,n-1,dtype=np.int_)
+            lines[:,2] = np.arange(1,n,dtype=np.int_)
+            pdata = pv.PolyData(arm_pts)
+            pdata.lines = lines
+        else:
+            pdata = pv.PolyData(arm_pts)
+        actor = plotter.add_mesh(pdata, color='blue', line_width=3)
+        actors.append((pdata, actor))
+
+    plotter.camera_position = 'xy'
+    plotter.show(auto_close=False)
+
+    while True:
+        for frame in frames:
+            for i, arm_pts in enumerate(frame):
+                pdata, actor = actors[i]
+                n = arm_pts.shape[0]
+                if n >= 2:
+                    lines = np.empty((n-1,3),dtype=np.int_)
+                    lines[:,0] = 2
+                    lines[:,1] = np.arange(0,n-1,dtype=np.int_)
+                    lines[:,2] = np.arange(1,n,dtype=np.int_)
+                    pdata.points = arm_pts
+                    pdata.lines = lines
+                else:
+                    pdata.points = arm_pts
+            plotter.render()
+            time.sleep(delay)
 
 # --------------------------
-# ================= REPLACE THIS FUNCTION =================
 def main():
     rods = build_octopus_with_body()
     central_body = rods[0]
@@ -243,53 +199,42 @@ def main():
 
     sim = OctopusSimulator()
 
-    # --- 添加 rods 與 forces ---
+    # 加入 rods 與 forces
     for rod in rods:
         sim.append(rod)
-        sim.add_forcing_to(rod).using(
-            GravityForces, acc_gravity=np.array([0.0, -9.81, 0.0])
-        )
-        sim.add_forcing_to(rod).using(
-            GroundPlaneWithFriction, k=1e4, nu_forward=0.8, nu_backward=1.0
-        )
-        sim.dampen(rod).using(
-            AnalyticalLinearDamper, damping_constant=0.5, time_step=1e-5
-        )
+        sim.add_forcing_to(rod).using(GravityForces, acc_gravity=np.array([0.0,-9.81,0.0]))
+        sim.add_forcing_to(rod).using(GroundPlaneWithFriction, k=1e4, nu_forward=0.8, nu_backward=1.0)
+        sim.dampen(rod).using(AnalyticalLinearDamper, damping_constant=0.5, time_step=1e-5)
 
-    # --- 中央身體與手臂的連接 ---
+    # 連接中央 body 與手臂
     connections = []
-    attachment_indices = [0] * 4 + [1] * 4
+    attachment_indices = [0]*4 + [1]*4
     for i, arm in enumerate(arms):
         central_attach_idx = attachment_indices[i]
         arm_root_idx = 0
         connections.append((central_body, central_attach_idx, arm, arm_root_idx))
 
-    sim.add_forcing_to(central_body).using(
-        RodConnector, connections=connections, k_connection=5e3
-    )
-    sim.add_forcing_to(central_body).using(
-        GaitController, arms=arms, amplitude=1.0, frequency=0.5, phase_shift=np.pi
-    )
+    sim.add_forcing_to(central_body).using(RodConnector, connections=connections, k_connection=5e3)
+    sim.add_forcing_to(central_body).using(GaitController, arms=arms, amplitude=1.0, frequency=0.5, phase_shift=np.pi)
 
-    # --- LiveVisualizer ---
-    dt = 1e-5
-    sim.collect_diagnostics(central_body).using(
-        LiveVisualizer,
-        step_skip=500,  # 每 500 步更新一次畫面
-        rods=rods
-    )
+    # ------------------ 收集每幀 ------------------
+    callback_params = {"frames": []}
+    sim.collect_diagnostics(central_body).using(PyVistaCallback, step_skip=500, rods=rods, callback_params=callback_params)
 
-    # --- finalize & timestepper ---
+    # finalize 與 timestepper
     sim.finalize()
     timestepper = PositionVerlet()
-    final_time = 10.0
-    total_steps = int(final_time / dt)
+    dt = 1e-5
+    final_time = 2.0
+    total_steps = int(final_time/dt)
 
-    print("Running REAL-TIME locomotion simulation...")
+    print("Running locomotion simulation...")
     integrate(timestepper, sim, final_time, total_steps)
+    print("Final time of simulation is:", final_time)
     print("Simulation finished.")
 
-# ================= END OF REPLACEMENT =================
+    # ------------------ 自動 3D 播放 ------------------
+    visualize_octopus_frames(callback_params["frames"])
 
 if __name__ == "__main__":
     main()
